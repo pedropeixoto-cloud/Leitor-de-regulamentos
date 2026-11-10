@@ -1,0 +1,7 @@
+# lista de fundos, regulamentos baixados e resultados (ficam fora do git)
+entrada/*
+!entrada/.gitkeep
+_regulamento/
+_script de amostra/
+amostra_*.xlsx
+__pycache__/

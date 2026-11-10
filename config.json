@@ -1,0 +1,11 @@
+{
+  "pastas": {
+      "fundos": "entrada/fundos.xlsx",
+      "regulamentos": "_regulamento",
+      "scripts": "_script de amostra"
+  },
+
+  "fundosnet": {
+      "pausa_segundos": 0.3
+  }
+}
