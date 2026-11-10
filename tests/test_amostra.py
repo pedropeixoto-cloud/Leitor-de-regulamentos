@@ -297,6 +297,17 @@ class TestPastaRevisar(unittest.TestCase):
             self.assertTrue((reg / "22222222000122 - FUNDO SEM REGRA - REG 2.docx").exists())
             self.assertFalse((reg / "_revisar" / "22222222000122 - FUNDO SEM REGRA - REG 2.docx").exists())
 
+            # a tabela das regras sai junto com o ler
+            import openpyxl
+            ws = openpyxl.load_workbook(tmp / "_script de amostra" / "_regras.xlsx")["Regras"]
+            cab = [c.value for c in ws[4]]
+            linhas = {r[0]: dict(zip(cab, r)) for r in ws.iter_rows(min_row=5, values_only=True)}
+            ok = linhas["11.111.111/0001-11"]
+            self.assertEqual((ok["Status"], ok["z"], ok["p"], ok["Erro (E)"], ok["n p/ N = 1.000"]), ("OK", 1.96, 0.5, 0.058, 223))
+            self.assertIn("5 cedentes", ok["Maiores obrigatórios"])
+            self.assertEqual(linhas["22.222.222/0001-22"]["Status"], "REVISADO MANUALMENTE")
+            self.assertEqual(linhas["22.222.222/0001-22"]["n p/ N = 1.000"], 50)
+
 
 if __name__ == "__main__":
     unittest.main()

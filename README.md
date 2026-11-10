@@ -49,9 +49,24 @@ _regulamento\
   _antigos\                         versões anteriores substituídas por um regulamento novo
   _indice.csv                       CNPJ, documento, data de entrega e arquivo (com a subpasta) de cada fundo
 _script de amostra\
+  _regras.xlsx                      tabela com a regra de todos os fundos (abas Regras e Resumo)
   _resumo.csv                       status, método, pendências e n para N = 1.000 de cada fundo
   <CNPJ> - <nome>\README.md         regra, trecho do regulamento e script da amostra
   <CNPJ> - <nome>\regra.json        a mesma regra em formato de dados (usada pelo comando amostra)
+```
+
+### Tabela das regras (`_regras.xlsx`)
+
+O `ler` gera uma planilha com uma linha por fundo: status (colorido), método, tamanho da amostra por extenso, os
+parâmetros (z, confiança, p, erro, quantidade, Amostra I, percentual, mínimo, máximo, limite para verificar tudo),
+população base, categorias verificadas a 100%, maiores obrigatórios ou excluídos, forma de seleção, pendências,
+observações e o link do regulamento no Fundos.NET. As colunas **n p/ N = 100 / 1.000 / 10.000** mostram o tamanho
+da amostra que a regra do fundo dá para cada população, com o mesmo cálculo do script de amostra. Os itens verificados a
+100% não entram no n. A aba **Resumo** conta os fundos por status e por método. Tem filtro em todas as colunas e
+cabeçalho congelado. Para refazer só a tabela, sem reler os regulamentos:
+
+```bash
+python amostra_regulamento.py tabela
 ```
 
 ### Status

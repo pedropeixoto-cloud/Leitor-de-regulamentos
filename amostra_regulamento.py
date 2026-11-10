@@ -8,6 +8,7 @@ Comandos:
   python amostra_regulamento.py ler        lê os regulamentos baixados e gera os README.md
   python amostra_regulamento.py tudo       buscar + ler
   python amostra_regulamento.py amostra --cnpj <cnpj> --base <base.xlsx>   roda a amostra de um fundo
+  python amostra_regulamento.py tabela     refaz a tabela _regras.xlsx com a regra de todos os fundos
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ import leitura  # noqa: E402
 import motor_amostra  # noqa: E402
 import readme_fundo  # noqa: E402
 import secao as secao_mod  # noqa: E402
+import tabela  # noqa: E402
 from fundosnet import Documento, FundosNet, so_digitos  # noqa: E402
 from regra import Regra, interpretar  # noqa: E402
 
@@ -268,6 +270,7 @@ def cmd_ler(cfg, args):
             print(f"{formatar_cnpj(cnpj)} ERRO ao ler {arquivo.name}: {e}")
     gravar_csv(resumo_path, CAMPOS_RESUMO, sorted(resumo.values(), key=lambda x: x.get("nome", "")))
     gravar_csv(pasta_reg / "_indice.csv", CAMPOS_INDICE, sorted(indice.values(), key=lambda x: x.get("nome", "")))
+    print(f"Tabela das regras: {tabela.gerar(list(resumo.values()), destino)}")
     n_rev = sum(1 for p in (pasta_reg / sub_revisar).glob("*") if p.is_file()) if (pasta_reg / sub_revisar).exists() else 0
     print(f"Regulamentos para revisão humana em {pasta_reg / sub_revisar}: {n_rev}")
     cont = {}
@@ -295,9 +298,21 @@ def cmd_amostra(cfg, args, extras):
     motor_amostra.main(dados["regra"], extras, nome_saida=f"amostra_{cnpj}.xlsx")
 
 
+def cmd_tabela(cfg):
+    """Refaz o _regras.xlsx a partir do _resumo.csv (sem reler os regulamentos)."""
+    destino = cfg["pastas"]["scripts"]
+    resumo_path = destino / "_resumo.csv"
+    if not resumo_path.exists():
+        raise SystemExit(f"Não há {resumo_path}. Rode primeiro: python amostra_regulamento.py ler")
+    with resumo_path.open(encoding="utf-8-sig", newline="") as f:
+        resumo = list(csv.DictReader(f, delimiter=";"))
+    print(f"Tabela das regras: {tabela.gerar(resumo, destino)} ({len(resumo)} fundos)")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comando", choices=["buscar", "ler", "tudo", "amostra"])
+    ap.add_argument("comando", choices=["buscar", "ler", "tudo", "amostra", "tabela"])
     ap.add_argument("--config", default=str(AQUI / "config.json"))
     ap.add_argument("--cnpj", nargs="+", help="só estes fundos")
     ap.add_argument("--fundos", help="lista de fundos (.xlsx/.csv) no lugar da do config.json")
@@ -313,6 +328,8 @@ def main(argv=None):
         return cmd_amostra(cfg, args, extras)
     if extras:
         ap.error(f"opções desconhecidas: {' '.join(extras)}")
+    if args.comando == "tabela":
+        return cmd_tabela(cfg)
     erros = 0
     if args.comando in ("buscar", "tudo"):
         erros += cmd_buscar(cfg, args)
