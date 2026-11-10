@@ -245,6 +245,47 @@ class TestFundosNet(unittest.TestCase):
         self.assertEqual(fundosnet.so_digitos("48.169.685/0001-20"), "48169685000120")
 
 
+CAPITULO_NDMP = """IX – DA VERIFICAÇÃO DE LASTRO
+9.1. A verificação prevista no inciso VII do item 4.2.1 da Parte Geral acima será efetuada pela GESTORA por amostragem.
+9.2 A GESTORA analisará em até 5 (cinco) dias depois da cessão a documentação que evidencia o lastro dos Direitos Creditórios.
+9.2.1. A critério da GESTORA, a verificação do lastro inicial poderá ser de 100% (cem por cento) dos Documentos Comprobatórios.
+9.3. A GESTORA pode contratar terceiros para efetuar a verificação do lastro de que trata o item 9.1 acima.
+9.5. Considerando a totalidade do lastro, passível ou não de registro, trimestralmente ou em periodicidade compatível com o prazo médio ponderado dos direitos creditórios da carteira, o que for maior, o CUSTODIANTE deve verificar a existência, integridade e titularidade do lastro dos direitos creditórios que ingressaram na carteira no período a título de substituição, assim como o lastro dos Direitos Creditórios vencidos e não pagos no mesmo período.
+"""
+
+
+class TestCapitulo(unittest.TestCase):
+    def test_capitulo_inteiro_e_100_por_cento_do_custodiante(self):
+        texto = ("SUMÁRIO\nIX – DA VERIFICAÇÃO DE LASTRO ........ 38\nX – DAS TAXAS ........ 39\n"
+                 + "\n".join(f"{i}.1 Cláusula qualquer." for i in range(30)) + "\n" + CAPITULO_NDMP
+                 + "X – DAS TAXAS\n10.1. A taxa de administração é de 0,5% (meio por cento) ao ano.\n")
+        s = secao.localizar_secao(texto)
+        self.assertEqual(s.origem, "capitulo")
+        self.assertIn("9.5.", s.texto)
+        self.assertNotIn("taxa de administração", s.texto)
+        r = interpretar(s.completo)
+        self.assertEqual(sorted(r.integral_categorias), ["inadimplidos", "substituidos"])
+        self.assertEqual(r.metodo, "nao_identificado")
+        self.assertIn("não define o tamanho", r.pendencias[0])
+
+    def test_capitulo_com_titulo_em_duas_linhas(self):
+        texto = ("10.\nDA VERIFICAÇÃO DE LASTRO\n10.1. A verificação do lastro será feita de forma integral pela Gestora.\n"
+                 "11.\nDAS TAXAS\n11.1 Quórum: maioria das Cotas Seniores e 75% (setenta e cinco por cento) das Subordinadas.\n")
+        s = secao.localizar_secao(texto)
+        self.assertNotIn("75%", s.texto)
+        self.assertEqual(interpretar(s.completo).metodo, "integral")
+
+    def test_conjuncao_e_nao_e_erro_amostral(self):
+        r = interpretar("A verificação do lastro será por amostragem. Quórum: maioria das Cotas Seniores e 75% "
+                        "(setenta e cinco por cento) das Cotas Subordinadas.")
+        self.assertIsNone(r.erro)
+        self.assertEqual(r.metodo, "nao_identificado")
+
+    def test_definicao_de_n_nao_vira_100_por_cento(self):
+        r = interpretar(ANEXO_FORMULA)
+        self.assertNotIn("recomprados", r.integral_categorias)
+
+
 class TestFic(unittest.TestCase):
     def test_titulo_fic(self):
         for titulo in ("REGULAMENTO DO SIG VI FUNDO DE INVESTIMENTO EM COTAS DE FUNDOS DE INVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ nº 1",

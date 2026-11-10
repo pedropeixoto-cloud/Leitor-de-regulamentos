@@ -115,8 +115,20 @@ regulamento por ele estar numa subpasta. Os nomes das pastas ficam em `subpastas
 
 A seção é procurada primeiro num **anexo** (ou adendo/apêndice) cujo título fala de verificação de lastro ou
 amostragem, ou no anexo que a cláusula de verificação de lastro cita ("na forma do Anexo III"). O sumário é ignorado.
-Sem anexo, são usadas as **cláusulas** com mais termos de regra de amostragem (fatores de risco, definições e
-obrigações genéricas do prestador ficam de fora).
+Sem anexo, se o regulamento tem um **capítulo** próprio ("IX – DA VERIFICAÇÃO DE LASTRO", "VERIFICAÇÃO DO LASTRO",
+inclusive com o título em duas linhas "10." / "DA VERIFICAÇÃO DE LASTRO"), o capítulo é lido inteiro, até o capítulo
+seguinte. Sem anexo nem capítulo, são usadas as **cláusulas** com mais termos de regra de amostragem (fatores de risco,
+definições e obrigações genéricas do prestador ficam de fora).
+
+A cláusula "Considerando a totalidade do lastro… o Custodiante deve verificar… os direitos creditórios que ingressaram
+a título de substituição, assim como os vencidos e não pagos" é lida como **verificação a 100%** de substituídos e
+inadimplidos. Quando o regulamento diz só "por amostragem" e não traz tamanho, fórmula ou percentual, o fundo vai para
+revisão humana, com a pendência explicando isso. Os itens que o regulamento manda verificar a 100% ficam registrados
+na regra mesmo assim.
+
+Se o `_resumo.csv` ou o `_regras.xlsx` estiverem abertos no Excel, o `ler` grava uma cópia com data e hora no nome
+(ex.: `_resumo (2026-11-10 173937).csv`) e avisa. O `_indice.csv` não admite cópia: com ele aberto, o comando para e
+pede para fechar o Excel.
 
 | Item da regra | Exemplos de texto reconhecido | No script |
 |---|---|---|

@@ -126,7 +126,8 @@ def interpretar(texto_secao: str) -> Regra:
         or re.search(r"propor[çc][ãa]o[^.\n%]{0,60}?(\d+(?:[,.]\d+)?)\s*%", t, re.I)
     if m:
         r.p = round(_num(m.group(1)) / 100, 6); r.evidencias["p"] = _frase(t, m.start())
-    m = re.search(r"(?:\bME\b|\bE0?\b|\bEo\b|erro\s+m[ée]dio|margem\s+de\s+erro(?:\s+amostral)?|erro\s+amostral(?:\s+toler[áa]vel)?|erro\s+m[áa]ximo|erro\s+estimado)"
+    # as siglas (ME, E, E0, Eo) só valem em maiúscula e seguidas de "=", ":" ou "(": o "e" de "Seniores e 75%" não é erro
+    m = re.search(r"(?:(?-i:\bME\b|\bE[0o]?\b)(?=\s*[=:(])|erro\s+m[ée]dio|margem\s+de\s+erro(?:\s+amostral)?|erro\s+amostral(?:\s+toler[áa]vel)?|erro\s+m[áa]ximo|erro\s+estimado)"
                   r"[^\d\n%]{0,30}?(\d+(?:[,.]\d+)?)\s*%(?:\s*\([^)]*\))?(\s*(?:e|a)\s*(\d+(?:[,.]\d+)?)\s*%)?", t, re.I)
     if m:
         if m.group(3):
@@ -205,8 +206,9 @@ def interpretar(texto_secao: str) -> Regra:
         # integral para parte da carteira e amostragem para outra parte (ou "poderá ser 100%")
         if re.search(r"poder[áa]\s+ser\s+de\s+100", ts):
             r.metodo = "nao_identificado"
-            r.pendencias.append("o regulamento diz que a verificação é por amostragem e só a verificação inicial "
-                                "\"poderá\" ser de 100%: os parâmetros da amostra não foram encontrados")
+            r.pendencias.append("o regulamento diz que a verificação é por amostragem, mas não define o tamanho da "
+                                "amostra (fórmula, quantidade ou percentual). Os 100% da verificação inicial são só uma "
+                                "faculdade da gestora (\"poderá\")")
         else:
             r.pendencias.append("o texto fala em verificação integral e também em amostragem: confira qual vale para a carteira")
 
@@ -267,10 +269,16 @@ def interpretar(texto_secao: str) -> Regra:
         r.pendencias.append("população base não descrita: usada a carteira a vencer na data-base")
 
     # ---- categorias verificadas a 100%
-    for m in re.finditer(r"(100\s*%|totalidade|cem por cento|individual(mente)?)[^.]{0,200}", t, re.I):
+    # Janela curta (200) para "100%", "totalidade dos…", "individualmente". Janela longa (400) só para "totalidade do
+    # lastro": "Considerando a totalidade do lastro, ..., o Custodiante deve verificar ... a título de substituição,
+    # assim como o lastro dos Direitos Creditórios vencidos e não pagos". A definição "N = totalidade de Direitos
+    # Creditórios adquiridos" não conta (ela precede a população base, que cita os recomprados).
+    for m in re.finditer(r"totalidade\s+do\s+lastro[^.]{0,400}"
+                         r"|(100\s*%|(?<!=\s)totalidade(?!\s+de\s+direitos\s+credit[óo]rios\s+adquiridos)|cem por cento"
+                         r"|individual(mente)?)[^.]{0,200}", t, re.I):
         trecho = sem_acento(m.group(0).lower())
         achou = False
-        if "inadimplid" in trecho or re.search(r"\bvencid", trecho):
+        if re.search(r"inadimpl(id|ent)|\bvencid", trecho):
             if "inadimplidos" not in r.integral_categorias:
                 r.integral_categorias.append("inadimplidos"); achou = True
         if "substitu" in trecho and "substituidos" not in r.integral_categorias:

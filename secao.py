@@ -138,7 +138,15 @@ def localizar_secao(texto_norm: str) -> Secao:
                 avisos.append(f"o sumário lista \"{re.sub(r'[ ._…]{4,}.*', '', linha)[:90]}\", mas esse anexo não está "
                               "no documento publicado no Fundos.NET")
 
-    # 2) cláusulas no corpo do regulamento
+    # 2) capítulo próprio no corpo ("IX – DA VERIFICAÇÃO DE LASTRO"): pega o capítulo inteiro
+    cap = _capitulo_lastro(texto_norm)
+    if cap:
+        ini, fim, titulo = cap
+        corpo = texto_norm[ini:fim].strip()
+        return Secao(texto=corpo, origem="capitulo", titulo=titulo, inicio=ini,
+                     mencoes=_mencoes(texto_norm, ini, fim), avisos=avisos)
+
+    # 3) cláusulas no corpo do regulamento
     paragrafos = texto_norm.split("\n")
     posicoes, pos = [], 0
     for p in paragrafos:
@@ -183,6 +191,32 @@ def localizar_secao(texto_norm: str) -> Secao:
     sel = sorted(set(escolhidos) | extra)
     return Secao(texto="\n".join(paragrafos[i] for i in sel).strip(), origem="clausulas",
                  inicio=posicoes[sel[0]], mencoes=[paragrafos[i] for _, i in notas[6:9]], avisos=avisos)
+
+
+# título de capítulo/seção sobre verificação de lastro, numa linha só
+_RE_CAPITULO_LASTRO = re.compile(
+    r"(?m)^(?:CAP[ÍI]TULO\s+[IVXL\d]+\s*[-–.:]?\s*|[IVXL]+\s*[-–.]\s*|\d{1,2}\.?\s+)?(?:D[AO]S?\s+)?"
+    r"(?:VERIFICA[ÇC][ÃA]O|PROCEDIMENTOS?\s+(?:DE|PARA)\s+(?:A\s+)?VERIFICA[ÇC][ÃA]O|VALIDA[ÇC][ÃA]O)"
+    r"\s+D[OAE]S?\s+(?:LASTRO|DOCUMENTOS\s+COMPROBAT[ÓO]RIOS)[^\n]{0,80}$")
+# começo do próximo capítulo. Inclui o título em duas linhas ("11." numa linha e "DAS TAXAS" na seguinte)
+_RE_PROX_CAPITULO = re.compile(
+    r"(?m)^(?:CAP[ÍI]TULO\s+[IVXL\d]+\b|[IVXL]+\s*[-–]\s*D[AOE]S?\s+[A-ZÇÃÕÉÍÓÚ]|ANEXO\s+[IVXL\d]|AP[ÊE]NDICE\b"
+    r"|\d{1,2}\.?[ \t]*$|D[AOE]S?\s+[A-ZÇÃÕÉÍÓÚÂÊÔ][A-ZÇÃÕÉÍÓÚÂÊÔ ,/-]{3,}$)")
+
+
+def _capitulo_lastro(texto_norm: str) -> tuple[int, int, str] | None:
+    """(início, fim, título) do capítulo de verificação de lastro, se houver um, fora do sumário."""
+    for m in _RE_CAPITULO_LASTRO.finditer(texto_norm):
+        titulo = m.group(0).strip()
+        if _RE_SUMARIO.search(titulo) or not titulo[:30].isupper():
+            continue
+        prox = _RE_PROX_CAPITULO.search(texto_norm, m.end())
+        fim = prox.start() if prox else len(texto_norm)
+        fim = min(fim, m.end() + 12000)
+        corpo = texto_norm[m.end():fim]
+        if len(corpo) > 150 and re.search(r"lastro|comprobat", corpo, re.I):
+            return m.start(), fim, titulo
+    return None
 
 
 def _mencoes(texto_norm: str, ini: int, fim: int) -> list[str]:

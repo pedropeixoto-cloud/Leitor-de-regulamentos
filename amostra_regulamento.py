@@ -94,12 +94,33 @@ def ler_indice(pasta: Path) -> dict[str, dict]:
         return {l["cnpj"]: l for l in csv.DictReader(f, delimiter=";")}
 
 
-def gravar_csv(caminho: Path, campos: list[str], linhas: list[dict]):
+def caminho_livre(caminho: Path, avisar: bool = True) -> Path:
+    """O próprio caminho, ou uma cópia com data e hora se o arquivo estiver aberto (bloqueado) no Excel."""
+    try:
+        if caminho.exists():
+            with caminho.open("r+b"):
+                pass
+        return caminho
+    except PermissionError:
+        alternativo = caminho.with_name(f"{caminho.stem} ({datetime.now():%Y-%m-%d %H%M%S}){caminho.suffix}")
+        if avisar:
+            print(f"[AVISO] {caminho.name} está aberto em outro programa (feche o Excel). Gravado em {alternativo.name}.")
+        return alternativo
+
+
+def gravar_csv(caminho: Path, campos: list[str], linhas: list[dict], copia_se_aberto: bool = True) -> Path:
+    """Grava o CSV. Aberto no Excel: grava uma cópia com data e hora, ou para com aviso (índice, que precisa do nome fixo)."""
     caminho.parent.mkdir(parents=True, exist_ok=True)
+    livre = caminho_livre(caminho, avisar=copia_se_aberto)
+    if livre != caminho and not copia_se_aberto:
+        raise SystemExit(f"{caminho} está aberto em outro programa. Feche o Excel e rode de novo "
+                         "(o índice precisa ser gravado com o nome original).")
+    caminho = livre
     with caminho.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=campos, delimiter=";", extrasaction="ignore")
         w.writeheader()
         w.writerows(linhas)
+    return caminho
 
 
 def filtrar(fundos, cnpjs):
@@ -158,7 +179,8 @@ def cmd_buscar(cfg, args):
         indice[cnpj] = reg
         novos += 1
         print(f"[{i}/{len(fundos)}] {formatar_cnpj(cnpj)} {'atualizado' if ant else 'baixado'}: {arquivo}")
-    gravar_csv(pasta / "_indice.csv", CAMPOS_INDICE, sorted(indice.values(), key=lambda x: x.get("nome", "")))
+    gravar_csv(pasta / "_indice.csv", CAMPOS_INDICE, sorted(indice.values(), key=lambda x: x.get("nome", "")),
+               copia_se_aberto=False)
     print(f"\nRegulamentos: {novos} baixado(s), {iguais} já atualizado(s), {falhas} falha(s). Índice: {pasta / '_indice.csv'}")
     return falhas
 
@@ -287,8 +309,9 @@ def cmd_ler(cfg, args):
             erros += 1
             resumo[cnpj] = {"cnpj": formatar_cnpj(cnpj), "nome": nome, "status": "ERRO", "pendencias": str(e)}
             print(f"{formatar_cnpj(cnpj)} ERRO ao ler {arquivo.name}: {e}")
-    gravar_csv(resumo_path, CAMPOS_RESUMO, sorted(resumo.values(), key=lambda x: x.get("nome", "")))
-    gravar_csv(pasta_reg / "_indice.csv", CAMPOS_INDICE, sorted(indice.values(), key=lambda x: x.get("nome", "")))
+    resumo_gravado = gravar_csv(resumo_path, CAMPOS_RESUMO, sorted(resumo.values(), key=lambda x: x.get("nome", "")))
+    gravar_csv(pasta_reg / "_indice.csv", CAMPOS_INDICE, sorted(indice.values(), key=lambda x: x.get("nome", "")),
+               copia_se_aberto=False)
     print(f"Tabela das regras: {tabela.gerar(list(resumo.values()), destino)}")
     for st, sub in pastas_status.items():
         n = sum(1 for p in (pasta_reg / sub).glob("*") if p.is_file()) if (pasta_reg / sub).exists() else 0
@@ -296,7 +319,7 @@ def cmd_ler(cfg, args):
     cont = {}
     for l in resumo.values():
         cont[l["status"]] = cont.get(l["status"], 0) + 1
-    print("\n" + ", ".join(f"{v} {k}" for k, v in sorted(cont.items())) + f". Resumo: {resumo_path}")
+    print("\n" + ", ".join(f"{v} {k}" for k, v in sorted(cont.items())) + f". Resumo: {resumo_gravado}")
     return erros
 
 

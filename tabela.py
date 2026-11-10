@@ -171,5 +171,12 @@ def gerar(resumo: list[dict], pasta_scripts: Path, destino: Path | None = None) 
     wr.column_dimensions["A"].width = 52
     wr.column_dimensions["B"].width = 10
     destino.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(destino)
+    try:
+        wb.save(destino)
+    except PermissionError:  # planilha aberta no Excel
+        from datetime import datetime
+        alternativo = destino.with_name(f"{destino.stem} ({datetime.now():%Y-%m-%d %H%M%S}){destino.suffix}")
+        print(f"[AVISO] {destino.name} está aberto em outro programa (feche o Excel). Gravado em {alternativo.name}.")
+        wb.save(alternativo)
+        destino = alternativo
     return destino
