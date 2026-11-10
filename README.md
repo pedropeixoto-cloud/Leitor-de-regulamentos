@@ -45,7 +45,9 @@ pip install -r requirements.txt
 ```
 _regulamento\
   <CNPJ> - <nome> - REG <id>.pdf    regulamento vigente baixado do Fundos.NET
-  _revisar\                         regulamentos dos fundos em REVISÃO HUMANA (movidos pelo ler)
+  _FIC FIDC\                        regulamentos de FIC FIDC (reconhecidos pela leitura)
+  _Procedimentos pré acordados\     regulamentos que remetem a regra às políticas da gestora/administradora
+  _revisar\                         regulamentos em REVISÃO HUMANA (nenhum dos casos acima)
   _antigos\                         versões anteriores substituídas por um regulamento novo
   _indice.csv                       CNPJ, documento, data de entrega e arquivo (com a subpasta) de cada fundo
 _script de amostra\
@@ -75,20 +77,39 @@ python amostra_regulamento.py tabela
 |---|---|---|
 | `OK` | Regra identificada sem pendências | Conferir o README por amostragem e usar |
 | `CONFERIR` | Regra identificada, mas com algum parâmetro assumido ou ambíguo | Ler as **Pendências** do README e confirmar com o trecho |
-| `REVISÃO HUMANA` | O regulamento não traz a regra, ou ela não foi reconhecida | Ler o regulamento e preencher o `regra.json` à mão |
+| `FIC FIDC` | O regulamento é de um fundo de investimento em cotas de FIDC | Tratar à parte (o README traz a regra, se houver) |
+| `PROCEDIMENTOS PRÉ-ACORDADOS` | O regulamento não traz a regra: remete às políticas/procedimentos da gestora ou administradora | Pedir o documento de procedimentos e registrar a regra no `regra.json` |
+| `REVISÃO HUMANA` | Nenhum dos casos acima, e a regra não foi encontrada ou reconhecida | Ler o regulamento e preencher o `regra.json` à mão |
 | `SEM REGULAMENTO` | Fundo sem regulamento no Fundos.NET | Conferir o CNPJ (classe x fundo) |
+
+A ordem de prioridade é FIC FIDC, depois procedimentos pré-acordados, depois revisão humana. Os dois primeiros saem
+**da leitura do regulamento**, não do nome do fundo na lista, então continuam funcionando com qualquer lista:
+
+- **FIC FIDC:** o título do regulamento ("REGULAMENTO DO … FUNDO DE INVESTIMENTO EM COTAS DE FUNDO(S) DE
+  INVESTIMENTO EM DIREITOS CREDITÓRIOS", "… EM COTAS DE FIDC", "FIC FIDC") ou a política de investimento ("a Classe
+  investe preponderantemente em cotas de outros FIDCs"). Um FIC citado só nas assinaturas eletrônicas do PDF não
+  conta. O README do fundo mostra o trecho que levou à classificação.
+- **Procedimentos pré-acordados:** a regra da amostra não foi identificada e o texto remete às "políticas da Gestora"
+  ou às regras "disponíveis no website da Administradora".
 
 Para registrar uma regra revisada à mão, edite o `regra.json` do fundo e marque `"revisado_manualmente": true`.
 O `ler` passa a usar essa regra (e não a sobrescreve) enquanto o regulamento for o mesmo documento. Se o fundo
 publicar um regulamento novo, a leitura automática volta a valer e o status mostra a mudança.
 
-#### Pasta `_revisar`
+#### Subpastas de `_regulamento`
 
-A cada `ler`, o regulamento de cada fundo em `REVISÃO HUMANA` é movido para `_regulamento\_revisar\`, para quem for
-revisar achar todos num lugar só. Quando o fundo sai da revisão, o regulamento volta para a raiz de `_regulamento`.
-Isso acontece quando o `regra.json` é marcado como revisado ou quando um regulamento novo passa a ser lido
-automaticamente. O `_indice.csv` guarda o caminho com a subpasta, e o `buscar` não baixa de novo um regulamento só
-porque ele está em `_revisar`. O nome da subpasta fica em `subpastas.revisar` no `config.json`.
+A cada `ler`, o regulamento de cada fundo é colocado na pasta do seu status:
+
+| Status | Pasta |
+|---|---|
+| `FIC FIDC` | `_regulamento\_FIC FIDC\` |
+| `PROCEDIMENTOS PRÉ-ACORDADOS` | `_regulamento\_Procedimentos pré acordados\` |
+| `REVISÃO HUMANA` | `_regulamento\_revisar\` |
+| demais | raiz de `_regulamento` |
+
+Se o status muda (por exemplo, o `regra.json` foi marcado como revisado ou saiu um regulamento novo), o arquivo muda de
+pasta no próximo `ler`. O `_indice.csv` guarda o caminho com a subpasta, e o `buscar` não baixa de novo um
+regulamento por ele estar numa subpasta. Os nomes das pastas ficam em `subpastas` no `config.json`.
 
 ## O que a leitura reconhece
 

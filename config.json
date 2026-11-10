@@ -6,7 +6,9 @@
   },
 
   "subpastas": {
-      "revisar": "_revisar"
+      "revisar": "_revisar",
+      "procedimentos": "_Procedimentos pré acordados",
+      "fic": "_FIC FIDC"
   },
 
   "fundosnet": {

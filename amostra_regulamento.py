@@ -173,9 +173,18 @@ def regra_de_dict(d: dict) -> Regra:
     return r
 
 
-def posicionar_regulamento(arquivo: Path, pasta_reg: Path, revisar: bool, subpasta: str) -> Path:
-    """Põe o regulamento em _regulamento/<subpasta> (revisão humana) ou na raiz de _regulamento (demais)."""
-    destino = (pasta_reg / subpasta if revisar else pasta_reg) / arquivo.name
+SUBPASTAS_PADRAO = {"revisar": "_revisar", "procedimentos": "_Procedimentos pré acordados", "fic": "_FIC FIDC"}
+# status -> chave de "subpastas" no config.json (os demais ficam na raiz de _regulamento)
+SUBPASTA_DO_STATUS = {"REVISÃO HUMANA": "revisar", "PROCEDIMENTOS PRÉ-ACORDADOS": "procedimentos", "FIC FIDC": "fic"}
+
+
+def subpastas(cfg: dict) -> dict:
+    return {**SUBPASTAS_PADRAO, **cfg.get("subpastas", {})}
+
+
+def posicionar_regulamento(arquivo: Path, pasta_reg: Path, subpasta: str | None) -> Path:
+    """Põe o regulamento em _regulamento/<subpasta> ou, sem subpasta, na raiz de _regulamento."""
+    destino = (pasta_reg / subpasta if subpasta else pasta_reg) / arquivo.name
     if destino != arquivo and arquivo.exists():
         destino.parent.mkdir(parents=True, exist_ok=True)
         arquivo.replace(destino)
@@ -183,9 +192,10 @@ def posicionar_regulamento(arquivo: Path, pasta_reg: Path, revisar: bool, subpas
 
 
 def processar_fundo(cnpj: str, nome: str, arquivo: Path, doc: Documento | None, destino_base: Path,
-                    pasta_reg: Path | None = None, sub_revisar: str = "_revisar") -> dict:
+                    pasta_reg: Path | None = None, pastas_status: dict | None = None) -> dict:
     texto = leitura.normalizar(leitura.extrair_texto(arquivo))
     sec = secao_mod.localizar_secao(texto)
+    fic, trecho_fic = secao_mod.eh_fic(texto)  # pela leitura do regulamento, não pelo nome da lista
     if len(texto) < 2000:
         sec.avisos.append("o PDF quase não tem texto (provavelmente digitalizado/imagem): leia o regulamento manualmente")
     pasta = destino_base / f"{cnpj} - {nome_pasta(nome)}"
@@ -205,17 +215,24 @@ def processar_fundo(cnpj: str, nome: str, arquivo: Path, doc: Documento | None, 
         sec.avisos = []
     else:
         r = interpretar(sec.completo if sec.origem != "nenhuma" else "")
-    status = "REVISADO MANUALMENTE" if revisada else readme_fundo.status(r, sec.avisos)
+    if fic:
+        status = "FIC FIDC"
+    elif revisada:
+        status = "REVISADO MANUALMENTE"
+    else:
+        status = readme_fundo.status(r, sec.avisos)
     local = "_regulamento"
     if pasta_reg is not None:
-        arquivo = posicionar_regulamento(arquivo, pasta_reg, status == "REVISÃO HUMANA", sub_revisar)
+        sub = (pastas_status or {}).get(status)
+        arquivo = posicionar_regulamento(arquivo, pasta_reg, sub)
         local = pasta_reg.name if arquivo.parent == pasta_reg else f"{pasta_reg.name}\\{arquivo.parent.name}"
     (pasta / "README.md").write_text(
-        readme_fundo.montar(nome=nome, cnpj=cnpj, doc=doc, arquivo=arquivo, secao=sec, r=r, local=local),
+        readme_fundo.montar(nome=nome, cnpj=cnpj, doc=doc, arquivo=arquivo, secao=sec, r=r, local=local,
+                            st=status, trecho_fic=trecho_fic),
         encoding="utf-8")
     caminho_regra.write_text(json.dumps({
         "cnpj": cnpj, "nome": nome, "doc_id": str(doc.id) if doc else "",
-        "status": status, "revisado_manualmente": bool(revisada),
+        "status": status, "revisado_manualmente": bool(revisada), "fic_fidc": fic, "trecho_fic": trecho_fic,
         "regra": r.para_dict(), "avisos_leitura": sec.avisos, "origem_trecho": sec.origem,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
@@ -231,7 +248,8 @@ def processar_fundo(cnpj: str, nome: str, arquivo: Path, doc: Documento | None, 
 def cmd_ler(cfg, args):
     pasta_reg = cfg["pastas"]["regulamentos"]
     destino = cfg["pastas"]["scripts"]
-    sub_revisar = cfg.get("subpastas", {}).get("revisar", "_revisar")
+    nomes_sub = subpastas(cfg)
+    pastas_status = {st: nomes_sub[chave] for st, chave in SUBPASTA_DO_STATUS.items()}
     indice = ler_indice(pasta_reg)
     if not indice:
         raise SystemExit(f"Nenhum regulamento baixado em {pasta_reg}. Rode primeiro: python amostra_regulamento.py buscar")
@@ -254,12 +272,13 @@ def cmd_ler(cfg, args):
         arquivo = pasta_reg / reg["arquivo"]
         if not arquivo.exists():  # movido à mão entre a raiz e a subpasta de revisão
             nome_arq = Path(reg["arquivo"]).name
-            arquivo = next((p for p in (pasta_reg / nome_arq, pasta_reg / sub_revisar / nome_arq) if p.exists()), arquivo)
+            candidatos = [pasta_reg / nome_arq, *(pasta_reg / sub / nome_arq for sub in nomes_sub.values())]
+            arquivo = next((p for p in candidatos if p.exists()), arquivo)
         doc = Documento(id=int(reg["doc_id"]), categoria="Regulamento", tipo="",
                         data_entrega=datetime.strptime(reg["data_entrega"], "%d/%m/%Y %H:%M") if reg.get("data_entrega") else None,
                         data_referencia="", status="Ativo", versao=1, nome_fundo=nome)
         try:
-            linha = processar_fundo(cnpj, nome, arquivo, doc, destino, pasta_reg, sub_revisar)
+            linha = processar_fundo(cnpj, nome, arquivo, doc, destino, pasta_reg, pastas_status)
             # caminho relativo à _regulamento, já com a subpasta de revisão quando for o caso
             reg["arquivo"] = linha.pop("_arquivo").relative_to(pasta_reg).as_posix()
             resumo[cnpj] = linha
@@ -271,8 +290,9 @@ def cmd_ler(cfg, args):
     gravar_csv(resumo_path, CAMPOS_RESUMO, sorted(resumo.values(), key=lambda x: x.get("nome", "")))
     gravar_csv(pasta_reg / "_indice.csv", CAMPOS_INDICE, sorted(indice.values(), key=lambda x: x.get("nome", "")))
     print(f"Tabela das regras: {tabela.gerar(list(resumo.values()), destino)}")
-    n_rev = sum(1 for p in (pasta_reg / sub_revisar).glob("*") if p.is_file()) if (pasta_reg / sub_revisar).exists() else 0
-    print(f"Regulamentos para revisão humana em {pasta_reg / sub_revisar}: {n_rev}")
+    for st, sub in pastas_status.items():
+        n = sum(1 for p in (pasta_reg / sub).glob("*") if p.is_file()) if (pasta_reg / sub).exists() else 0
+        print(f"{st}: {n} regulamento(s) em {pasta_reg / sub}")
     cont = {}
     for l in resumo.values():
         cont[l["status"]] = cont.get(l["status"], 0) + 1

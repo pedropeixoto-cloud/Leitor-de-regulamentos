@@ -41,6 +41,7 @@ class Regra:
     periodicidade: str | None = None
     pendencias: list[str] = field(default_factory=list)   # o que impede de usar a regra sem revisão
     observacoes: list[str] = field(default_factory=list)  # informativo
+    regra_externa: bool = False  # o regulamento remete às políticas/procedimentos da gestora ou administradora
     evidencias: dict[str, str] = field(default_factory=dict)  # campo -> frase do regulamento
 
     @property
@@ -228,6 +229,7 @@ def interpretar(texto_secao: str) -> Regra:
     externa = re.search(r"(dispon[íi]ve(l|is)\s+n[oa]\s+(website|s[íi]tio|p[áa]gina)[^.;]{0,60}"
                         r"|nas\s+pol[íi]ticas\s+d[ao]\s+(gestor|gestora|administrador|administradora|custodiante))", ts)
     if r.metodo == "nao_identificado" and externa:
+        r.regra_externa = True
         r.evidencias["regra_externa"] = _frase(t, externa.start(), 400)
         r.pendencias.append("o regulamento não traz a regra da amostra: remete às políticas da gestora / regras "
                             "publicadas no website da administradora. Peça o documento à gestora ou à administradora")

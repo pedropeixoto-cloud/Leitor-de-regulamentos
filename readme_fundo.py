@@ -111,20 +111,34 @@ def script(r: Regra, cnpj_fmt: str, cnpj: str, nome: str, doc_id) -> str:
             f'if __name__ == "__main__":\n    main(REGRA, nome_saida="amostra_{cnpj}.xlsx")\n')
 
 
-def status(r: Regra, avisos: list[str]) -> str:
+SELOS = {
+    "OK": "✅ Regra identificada",
+    "CONFERIR": "⚠️ Regra identificada com pendências: conferir",
+    "REVISÃO HUMANA": "❌ Revisão humana: a regra não foi identificada automaticamente",
+    "PROCEDIMENTOS PRÉ-ACORDADOS": "📋 Procedimentos pré-acordados: o regulamento remete a regra às políticas da "
+                                   "gestora/administradora (fora do regulamento)",
+    "FIC FIDC": "📁 FIC FIDC: fundo de investimento em cotas de FIDC (pela leitura do regulamento)",
+    "REVISADO MANUALMENTE": "✅ Regra revisada manualmente (regra.json)",
+}
+
+
+def status(r: Regra, avisos: list[str], fic: bool = False) -> str:
+    """Prioridade: FIC FIDC > procedimentos pré-acordados > revisão humana > conferir > ok."""
+    if fic:
+        return "FIC FIDC"
     if r.metodo == "nao_identificado":
-        return "REVISÃO HUMANA"
+        return "PROCEDIMENTOS PRÉ-ACORDADOS" if r.regra_externa else "REVISÃO HUMANA"
     if r.pendencias or avisos:
         return "CONFERIR"
     return "OK"
 
 
-def montar(*, nome: str, cnpj: str, doc, arquivo: Path | None, secao, r: Regra, local: str = "_regulamento") -> str:
-    """cnpj: só os dígitos (vai no nome dos arquivos). local: pasta onde o regulamento está."""
+def montar(*, nome: str, cnpj: str, doc, arquivo: Path | None, secao, r: Regra, local: str = "_regulamento",
+           st: str | None = None, trecho_fic: str = "") -> str:
+    """cnpj: só os dígitos (vai no nome dos arquivos). local: pasta onde o regulamento está. st: status final."""
     cnpj_fmt = f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
-    st = status(r, secao.avisos)
-    selo = {"OK": "✅ Regra identificada", "CONFERIR": "⚠️ Regra identificada com pendências: conferir",
-            "REVISÃO HUMANA": "❌ Revisão humana: a regra não foi identificada automaticamente"}[st]
+    st = st or status(r, secao.avisos)
+    selo = SELOS.get(st, st)
     L = [f"# Amostra de verificação de lastro: {nome}", "",
          f"- **CNPJ:** {cnpj_fmt}"]
     if doc is not None:
@@ -134,6 +148,8 @@ def montar(*, nome: str, cnpj: str, doc, arquivo: Path | None, secao, r: Regra, 
     if arquivo is not None:
         L.append(f"- **Arquivo:** `{arquivo.name}` (pasta `{local}`)")
     L += [f"- **Gerado em:** {date.today():%d/%m/%Y}", "", f"**Status: {selo}**", ""]
+    if st == "FIC FIDC" and trecho_fic:
+        L += [f"*Reconhecido como FIC FIDC por este trecho do regulamento:* \"{trecho_fic[:300]}\"", ""]
 
     if r.pendencias or secao.avisos:
         L += ["## Pendências", ""] + [f"- {p}" for p in [*secao.avisos, *r.pendencias]] + [""]
@@ -190,6 +206,13 @@ def montar(*, nome: str, cnpj: str, doc, arquivo: Path | None, secao, r: Regra, 
               "- Saída: `amostra_<cnpj>.xlsx` com as abas *Amostra* (itens a verificar e o motivo de cada um), "
               "*Resumo* (N, n, K, ponto de partida, parâmetros) e, se houver, *Excluídos (maiores)*.", "",
               "```python", script(r, cnpj_fmt, cnpj, nome, doc.id if doc is not None else "?").rstrip(), "```", ""]
+    elif st == "PROCEDIMENTOS PRÉ-ACORDADOS":
+        L += ["## Script da amostra", "",
+              "Não gerado: o regulamento não traz a regra da amostra e remete às políticas/procedimentos da gestora "
+              "ou da administradora (veja o trecho em *regra_externa* acima). Peça o documento de procedimentos à "
+              "gestora ou à administradora. Com a regra em mãos, registre-a no `regra.json` desta pasta (marque "
+              "`\"revisado_manualmente\": true`) e rode "
+              f"`python amostra_regulamento.py amostra --cnpj {cnpj} --base <base>`.", ""]
     else:
         L += ["## Script da amostra", "",
               "Não gerado: a regra não foi identificada. Leia o trecho acima (ou o regulamento completo), "

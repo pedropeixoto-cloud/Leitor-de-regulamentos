@@ -11,6 +11,7 @@ from regra import Regra
 N_EXEMPLOS = (100, 1_000, 10_000)
 FONTE = "Arial"
 CORES_STATUS = {"OK": "E2EFDA", "CONFERIR": "FFF2CC", "REVISÃO HUMANA": "F8CBAD",
+                "PROCEDIMENTOS PRÉ-ACORDADOS": "E4DFEC", "FIC FIDC": "FCE4D6",
                 "REVISADO MANUALMENTE": "DDEBF7", "SEM REGULAMENTO": "D9D9D9", "ERRO": "F8CBAD"}
 
 # (cabeçalho, largura, chave)
@@ -151,11 +152,12 @@ def gerar(resumo: list[dict], pasta_scripts: Path, destino: Path | None = None) 
     faixa_s = f"Regras!${col_status}${cab + 1}:${col_status}${max(ultima, cab + 1)}"
     faixa_m = f"Regras!${col_metodo}${cab + 1}:${col_metodo}${max(ultima, cab + 1)}"
     r0 = 2
-    for k, nome in enumerate(["OK", "CONFERIR", "REVISÃO HUMANA", "REVISADO MANUALMENTE", "SEM REGULAMENTO", "ERRO"]):
+    todos = list(CORES_STATUS)
+    for k, nome in enumerate(todos):
         wr.cell(row=r0 + k, column=1, value=nome)
         wr.cell(row=r0 + k, column=2, value=f'=COUNTIF({faixa_s},A{r0 + k})')
         wr.cell(row=r0 + k, column=1).fill = PatternFill("solid", fgColor=CORES_STATUS.get(nome, "FFFFFF"))
-    tot = r0 + 6
+    tot = r0 + len(todos)
     wr.cell(row=tot, column=1, value="Total")
     wr.cell(row=tot, column=2, value=f"=SUM(B{r0}:B{tot - 1})")
     wr.cell(row=tot + 2, column=1, value="Fundos por método").font = Font(name=FONTE, size=11, bold=True)

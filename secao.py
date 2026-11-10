@@ -201,3 +201,34 @@ def _mencoes(texto_norm: str, ini: int, fim: int) -> list[str]:
         if pontos(p) >= 7:
             out.append(p)
     return out[:5]
+
+
+# ---------------------------------------------------------------- FIC FIDC (pela leitura do regulamento)
+
+_RE_TITULO_FIC = re.compile(
+    # \s* tolera palavras grudadas pelo PDF ("FUNDO DEINVESTIMENTO")
+    r"\b(fundo\s*de\s*investimento|fi)\s+em\s+cotas\s+de\s+"
+    r"(fidcs?\b|(classes?\s*de\s*)?fundos?\s*de\s*investimento\s*em\s*direitos\s*credit)"
+    r"|\bfic[\s-]*fidc\b", re.I)
+_RE_POLITICA_FIC = re.compile(
+    r"(classe|fundo)\s+(investe|aplica|alocar[áa])\s+(preponderantemente|majoritariamente|exclusivamente|no\s+m[íi]nimo[^.]{0,40})"
+    r"\s+(seus\s+recursos\s+)?em\s+cotas\s+de\s+(outros\s+|classes\s+de\s+)?(fidcs?|fundos\s+de\s+investimento\s+em\s+direitos)", re.I)
+
+
+def eh_fic(texto_norm: str) -> tuple[bool, str]:
+    """(é FIC-FIDC?, trecho que mostra). Olha o título do regulamento e a política de investimento.
+
+    O título é procurado logo depois de "REGULAMENTO DO/DA" (as assinaturas eletrônicas no topo do PDF citam
+    cotistas que são FIC e não valem como título).
+    """
+    t = re.sub(r"\s+", " ", texto_norm)
+    for m in re.finditer(r"regulamento\s+d[oa]\s+", t[:20000], re.I):
+        titulo = t[m.start():m.start() + 260]
+        titulo = re.split(r"CNPJ|DEFINI|Esse documento foi assinado", titulo, maxsplit=1, flags=re.I)[0]
+        if _RE_TITULO_FIC.search(titulo):
+            return True, titulo.strip()
+        break
+    m = _RE_POLITICA_FIC.search(t)
+    if m:
+        return True, t[max(0, m.start() - 60):m.end() + 80].strip()
+    return False, ""

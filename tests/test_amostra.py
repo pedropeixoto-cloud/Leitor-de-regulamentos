@@ -245,6 +245,35 @@ class TestFundosNet(unittest.TestCase):
         self.assertEqual(fundosnet.so_digitos("48.169.685/0001-20"), "48169685000120")
 
 
+class TestFic(unittest.TestCase):
+    def test_titulo_fic(self):
+        for titulo in ("REGULAMENTO DO SIG VI FUNDO DE INVESTIMENTO EM COTAS DE FUNDOS DE INVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ nº 1",
+                       "Página 4 de 49 REGULAMENTO DO ATLAS FUNDO DE INVESTIMENTO EM COTAS DE FUNDO DE INVESTIMENTO EM DIREITOS CREDITÓRIOS",
+                       "REGULAMENTO DO IGNIS FUNDO DE INVESTIMENTO EM COTAS DE FUNDO DEINVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ: 1",
+                       "REGULAMENTO DO MANACÁ FUNDO DE INVESTIMENTO EM COTAS DE FIDC RESPONSABILIDADE LIMITADA CNPJ/MF nº 1"):
+            self.assertTrue(secao.eh_fic(titulo)[0], titulo)
+
+    def test_assinatura_de_cotista_fic_nao_conta(self):
+        texto = ("REGULAMENTO DO AMALFI FUNDO DE INVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ/MF nº 1 Esse documento foi "
+                 "assinado por Fulano e BRM CARBYNE CRÉDITO ESTRUTURADO FIC FIDC RL.")
+        self.assertFalse(secao.eh_fic(texto)[0])
+
+    def test_politica_de_investimento(self):
+        texto = ("REGULAMENTO DO INVICTO FUNDO DE INVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ 1\n"
+                 "Artigo 39. Considerando que a Classe investe preponderantemente em cotas de outros FIDCs, não é possível detalhar.")
+        self.assertTrue(secao.eh_fic(texto)[0])
+
+    def test_procedimentos_pre_acordados(self):
+        r = interpretar("Artigo 15. Para fins da verificação da existência, integridade e titularidade do lastro, a verificação "
+                        "pela Gestora poderá ser efetuada: (a) de forma individualizada; (b) por amostragem, utilizando modelo "
+                        "estatístico consistente e passível de verificação, conforme previsto neste Regulamento e nas políticas "
+                        "da Gestora, sendo que tais regras estão disponíveis no website da Administradora.")
+        self.assertTrue(r.regra_externa)
+        self.assertEqual(readme_fundo.status(r, []), "PROCEDIMENTOS PRÉ-ACORDADOS")
+        self.assertEqual(readme_fundo.status(interpretar("verificação do lastro por amostragem, conforme as diretrizes "
+                                                          "do presente Anexo."), []), "REVISÃO HUMANA")
+
+
 def docx_ficticio(caminho: Path, texto: str):
     import zipfile
     from xml.sax.saxutils import escape
@@ -307,6 +336,45 @@ class TestPastaRevisar(unittest.TestCase):
             self.assertIn("5 cedentes", ok["Maiores obrigatórios"])
             self.assertEqual(linhas["22.222.222/0001-22"]["Status"], "REVISADO MANUALMENTE")
             self.assertEqual(linhas["22.222.222/0001-22"]["n p/ N = 1.000"], 50)
+
+    def test_fic_e_procedimentos_vao_para_pastas_proprias(self):
+        import json
+        import amostra_regulamento as app
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            reg = tmp / "_regulamento"
+            reg.mkdir()
+            ench = "\n".join(f"{i}.1 Cláusula genérica número {i} do regulamento." for i in range(60))
+            fundos = {
+                # nome na lista NÃO diz que é FIC: o que vale é o título do regulamento
+                "33333333000133": ("FUNDO X", "REGULAMENTO DO X FUNDO DE INVESTIMENTO EM COTAS DE FUNDOS DE INVESTIMENTO "
+                                              "EM DIREITOS CREDITÓRIOS CNPJ 1\n" + ench),
+                "44444444000144": ("FUNDO Y", "REGULAMENTO DO Y FUNDO DE INVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ 1\n" + ench +
+                                   "\nArtigo 15. A verificação do lastro pela Gestora poderá ser efetuada de forma individualizada "
+                                   "ou por amostragem, utilizando modelo estatístico consistente, conforme as políticas da "
+                                   "Gestora, sendo que tais regras estão disponíveis no website da Administradora."),
+                "55555555000155": ("FUNDO Z", "REGULAMENTO DO Z FUNDO DE INVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ 1\n" + ench +
+                                   "\nO Gestor verificará o lastro por amostragem, conforme as diretrizes descritas no presente Anexo."),
+            }
+            linhas = []
+            for c, (nome, texto) in fundos.items():
+                arq = f"{c} - {nome} - REG 9.docx"
+                docx_ficticio(reg / arq, texto)
+                linhas.append({"cnpj": c, "nome": nome, "status": "ok", "doc_id": "9", "data_entrega": "", "arquivo": arq})
+            app.gravar_csv(reg / "_indice.csv", app.CAMPOS_INDICE, linhas)
+            (tmp / "config.json").write_text(json.dumps({"pastas": {
+                "fundos": "nao_existe.xlsx", "regulamentos": "_regulamento", "scripts": "_script de amostra"}}), encoding="utf-8")
+            self.assertEqual(app.main(["ler", "--config", str(tmp / "config.json")]), 0)
+            self.assertTrue((reg / "_FIC FIDC" / "33333333000133 - FUNDO X - REG 9.docx").exists())
+            self.assertTrue((reg / "_Procedimentos pré acordados" / "44444444000144 - FUNDO Y - REG 9.docx").exists())
+            self.assertTrue((reg / "_revisar" / "55555555000155 - FUNDO Z - REG 9.docx").exists())
+            indice = app.ler_indice(reg)
+            self.assertEqual(indice["33333333000133"]["arquivo"], "_FIC FIDC/33333333000133 - FUNDO X - REG 9.docx")
+            readme = (next((tmp / "_script de amostra").glob("4444*")) / "README.md").read_text(encoding="utf-8")
+            self.assertIn("Procedimentos pré-acordados", readme)
+            # rodar de novo mantém tudo no lugar
+            self.assertEqual(app.main(["ler", "--config", str(tmp / "config.json")]), 0)
+            self.assertTrue((reg / "_FIC FIDC" / "33333333000133 - FUNDO X - REG 9.docx").exists())
 
 
 if __name__ == "__main__":
