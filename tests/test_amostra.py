@@ -245,5 +245,58 @@ class TestFundosNet(unittest.TestCase):
         self.assertEqual(fundosnet.so_digitos("48.169.685/0001-20"), "48169685000120")
 
 
+def docx_ficticio(caminho: Path, texto: str):
+    import zipfile
+    from xml.sax.saxutils import escape
+    corpo = "".join(f"<w:p><w:r><w:t>{escape(l)}</w:t></w:r></w:p>" for l in texto.split("\n"))
+    with zipfile.ZipFile(caminho, "w") as z:
+        z.writestr("word/document.xml", f'<w:document xmlns:w="w"><w:body>{corpo}</w:body></w:document>')
+
+
+class TestPastaRevisar(unittest.TestCase):
+    def test_revisao_humana_vai_para_revisar_e_volta(self):
+        import json
+        import amostra_regulamento as app
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            reg = tmp / "_regulamento"
+            reg.mkdir()
+            enchimento = "\n".join(f"{i}.1 Cláusula genérica número {i} do regulamento." for i in range(60))
+            docx_ficticio(reg / "11111111000111 - FUNDO OK - REG 1.docx", enchimento + "\n" + ANEXO_FORMULA)
+            docx_ficticio(reg / "22222222000122 - FUNDO SEM REGRA - REG 2.docx",
+                          enchimento + "\nO Gestor verificará o lastro por amostragem, conforme as diretrizes descritas no presente Anexo.")
+            linhas = [{"cnpj": "11111111000111", "nome": "FUNDO OK", "status": "ok", "doc_id": "1",
+                       "data_entrega": "01/01/2026 10:00", "arquivo": "11111111000111 - FUNDO OK - REG 1.docx"},
+                      {"cnpj": "22222222000122", "nome": "FUNDO SEM REGRA", "status": "ok", "doc_id": "2",
+                       "data_entrega": "01/01/2026 10:00", "arquivo": "22222222000122 - FUNDO SEM REGRA - REG 2.docx"}]
+            app.gravar_csv(reg / "_indice.csv", app.CAMPOS_INDICE, linhas)
+            (tmp / "config.json").write_text(json.dumps({
+                "pastas": {"fundos": "nao_existe.xlsx", "regulamentos": "_regulamento", "scripts": "_script de amostra"},
+                "subpastas": {"revisar": "_revisar"}}), encoding="utf-8")
+            self.assertEqual(app.main(["ler", "--config", str(tmp / "config.json")]), 0)
+
+            self.assertTrue((reg / "11111111000111 - FUNDO OK - REG 1.docx").exists())
+            self.assertTrue((reg / "_revisar" / "22222222000122 - FUNDO SEM REGRA - REG 2.docx").exists())
+            self.assertFalse((reg / "22222222000122 - FUNDO SEM REGRA - REG 2.docx").exists())
+            indice = app.ler_indice(reg)
+            self.assertEqual(indice["22222222000122"]["arquivo"], "_revisar/22222222000122 - FUNDO SEM REGRA - REG 2.docx")
+            readme = next((tmp / "_script de amostra").glob("2222*")) / "README.md"
+            self.assertIn("_regulamento\\_revisar", readme.read_text(encoding="utf-8"))
+
+            # rodar de novo não quebra (o arquivo já está na subpasta)
+            self.assertEqual(app.main(["ler", "--config", str(tmp / "config.json")]), 0)
+            self.assertTrue((reg / "_revisar" / "22222222000122 - FUNDO SEM REGRA - REG 2.docx").exists())
+
+            # depois da revisão manual, o regulamento volta para a raiz
+            caminho_regra = next((tmp / "_script de amostra").glob("2222*")) / "regra.json"
+            dados = json.loads(caminho_regra.read_text(encoding="utf-8"))
+            dados["revisado_manualmente"] = True
+            dados["regra"].update(metodo="quantidade_fixa", quantidade=50, populacao=["a_vencer"], pendencias=[])
+            caminho_regra.write_text(json.dumps(dados), encoding="utf-8")
+            self.assertEqual(app.main(["ler", "--config", str(tmp / "config.json")]), 0)
+            self.assertTrue((reg / "22222222000122 - FUNDO SEM REGRA - REG 2.docx").exists())
+            self.assertFalse((reg / "_revisar" / "22222222000122 - FUNDO SEM REGRA - REG 2.docx").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

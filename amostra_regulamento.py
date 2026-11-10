@@ -171,7 +171,17 @@ def regra_de_dict(d: dict) -> Regra:
     return r
 
 
-def processar_fundo(cnpj: str, nome: str, arquivo: Path, doc: Documento | None, destino_base: Path) -> dict:
+def posicionar_regulamento(arquivo: Path, pasta_reg: Path, revisar: bool, subpasta: str) -> Path:
+    """Põe o regulamento em _regulamento/<subpasta> (revisão humana) ou na raiz de _regulamento (demais)."""
+    destino = (pasta_reg / subpasta if revisar else pasta_reg) / arquivo.name
+    if destino != arquivo and arquivo.exists():
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        arquivo.replace(destino)
+    return destino
+
+
+def processar_fundo(cnpj: str, nome: str, arquivo: Path, doc: Documento | None, destino_base: Path,
+                    pasta_reg: Path | None = None, sub_revisar: str = "_revisar") -> dict:
     texto = leitura.normalizar(leitura.extrair_texto(arquivo))
     sec = secao_mod.localizar_secao(texto)
     if len(texto) < 2000:
@@ -193,10 +203,14 @@ def processar_fundo(cnpj: str, nome: str, arquivo: Path, doc: Documento | None, 
         sec.avisos = []
     else:
         r = interpretar(sec.completo if sec.origem != "nenhuma" else "")
-    (pasta / "README.md").write_text(
-        readme_fundo.montar(nome=nome, cnpj=cnpj, doc=doc, arquivo=arquivo, secao=sec, r=r),
-        encoding="utf-8")
     status = "REVISADO MANUALMENTE" if revisada else readme_fundo.status(r, sec.avisos)
+    local = "_regulamento"
+    if pasta_reg is not None:
+        arquivo = posicionar_regulamento(arquivo, pasta_reg, status == "REVISÃO HUMANA", sub_revisar)
+        local = pasta_reg.name if arquivo.parent == pasta_reg else f"{pasta_reg.name}\\{arquivo.parent.name}"
+    (pasta / "README.md").write_text(
+        readme_fundo.montar(nome=nome, cnpj=cnpj, doc=doc, arquivo=arquivo, secao=sec, r=r, local=local),
+        encoding="utf-8")
     caminho_regra.write_text(json.dumps({
         "cnpj": cnpj, "nome": nome, "doc_id": str(doc.id) if doc else "",
         "status": status, "revisado_manualmente": bool(revisada),
@@ -208,12 +222,14 @@ def processar_fundo(cnpj: str, nome: str, arquivo: Path, doc: Documento | None, 
         n1000 = ""
     return {"cnpj": formatar_cnpj(cnpj), "nome": nome, "status": status, "metodo": r.metodo,
             "confiabilidade": r.confiabilidade, "n_para_N_1000": n1000, "doc_id": doc.id if doc else "",
-            "origem_trecho": sec.origem, "pendencias": " | ".join([*sec.avisos, *r.pendencias]), "pasta": pasta.name}
+            "origem_trecho": sec.origem, "pendencias": " | ".join([*sec.avisos, *r.pendencias]), "pasta": pasta.name,
+            "_arquivo": arquivo}
 
 
 def cmd_ler(cfg, args):
     pasta_reg = cfg["pastas"]["regulamentos"]
     destino = cfg["pastas"]["scripts"]
+    sub_revisar = cfg.get("subpastas", {}).get("revisar", "_revisar")
     indice = ler_indice(pasta_reg)
     if not indice:
         raise SystemExit(f"Nenhum regulamento baixado em {pasta_reg}. Rode primeiro: python amostra_regulamento.py buscar")
@@ -234,18 +250,26 @@ def cmd_ler(cfg, args):
                             "pendencias": reg.get("status", ""), "metodo": "", "confiabilidade": ""}
             continue
         arquivo = pasta_reg / reg["arquivo"]
+        if not arquivo.exists():  # movido à mão entre a raiz e a subpasta de revisão
+            nome_arq = Path(reg["arquivo"]).name
+            arquivo = next((p for p in (pasta_reg / nome_arq, pasta_reg / sub_revisar / nome_arq) if p.exists()), arquivo)
         doc = Documento(id=int(reg["doc_id"]), categoria="Regulamento", tipo="",
                         data_entrega=datetime.strptime(reg["data_entrega"], "%d/%m/%Y %H:%M") if reg.get("data_entrega") else None,
                         data_referencia="", status="Ativo", versao=1, nome_fundo=nome)
         try:
-            resumo[cnpj] = processar_fundo(cnpj, nome, arquivo, doc, destino)
-            linha = resumo[cnpj]
+            linha = processar_fundo(cnpj, nome, arquivo, doc, destino, pasta_reg, sub_revisar)
+            # caminho relativo à _regulamento, já com a subpasta de revisão quando for o caso
+            reg["arquivo"] = linha.pop("_arquivo").relative_to(pasta_reg).as_posix()
+            resumo[cnpj] = linha
             print(f"{linha['cnpj']} {linha['status']:<20} {linha['metodo']:<18} {nome[:60]}")
         except Exception as e:  # um regulamento ruim não para o lote
             erros += 1
             resumo[cnpj] = {"cnpj": formatar_cnpj(cnpj), "nome": nome, "status": "ERRO", "pendencias": str(e)}
             print(f"{formatar_cnpj(cnpj)} ERRO ao ler {arquivo.name}: {e}")
     gravar_csv(resumo_path, CAMPOS_RESUMO, sorted(resumo.values(), key=lambda x: x.get("nome", "")))
+    gravar_csv(pasta_reg / "_indice.csv", CAMPOS_INDICE, sorted(indice.values(), key=lambda x: x.get("nome", "")))
+    n_rev = sum(1 for p in (pasta_reg / sub_revisar).glob("*") if p.is_file()) if (pasta_reg / sub_revisar).exists() else 0
+    print(f"Regulamentos para revisão humana em {pasta_reg / sub_revisar}: {n_rev}")
     cont = {}
     for l in resumo.values():
         cont[l["status"]] = cont.get(l["status"], 0) + 1

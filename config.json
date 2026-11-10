@@ -5,6 +5,10 @@
       "scripts": "_script de amostra"
   },
 
+  "subpastas": {
+      "revisar": "_revisar"
+  },
+
   "fundosnet": {
       "pausa_segundos": 0.3
   }

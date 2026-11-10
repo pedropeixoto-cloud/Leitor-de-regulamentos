@@ -119,8 +119,8 @@ def status(r: Regra, avisos: list[str]) -> str:
     return "OK"
 
 
-def montar(*, nome: str, cnpj: str, doc, arquivo: Path | None, secao, r: Regra) -> str:
-    """cnpj: só os dígitos (vai no nome dos arquivos)."""
+def montar(*, nome: str, cnpj: str, doc, arquivo: Path | None, secao, r: Regra, local: str = "_regulamento") -> str:
+    """cnpj: só os dígitos (vai no nome dos arquivos). local: pasta onde o regulamento está."""
     cnpj_fmt = f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
     st = status(r, secao.avisos)
     selo = {"OK": "✅ Regra identificada", "CONFERIR": "⚠️ Regra identificada com pendências: conferir",
@@ -132,7 +132,7 @@ def montar(*, nome: str, cnpj: str, doc, arquivo: Path | None, secao, r: Regra) 
         L.append(f"- **Regulamento:** documento {doc.id} do Fundos.NET, entregue em {entrega} "
                  f"([abrir]({URL_DOCUMENTO.format(id=doc.id)}))")
     if arquivo is not None:
-        L.append(f"- **Arquivo:** `{arquivo.name}` (pasta `_regulamento`)")
+        L.append(f"- **Arquivo:** `{arquivo.name}` (pasta `{local}`)")
     L += [f"- **Gerado em:** {date.today():%d/%m/%Y}", "", f"**Status: {selo}**", ""]
 
     if r.pendencias or secao.avisos:

@@ -45,7 +45,9 @@ pip install -r requirements.txt
 ```
 _regulamento\
   <CNPJ> - <nome> - REG <id>.pdf    regulamento vigente baixado do Fundos.NET
-  _indice.csv                       CNPJ, documento, data de entrega e arquivo de cada fundo
+  _revisar\                         regulamentos dos fundos em REVISÃO HUMANA (movidos pelo ler)
+  _antigos\                         versões anteriores substituídas por um regulamento novo
+  _indice.csv                       CNPJ, documento, data de entrega e arquivo (com a subpasta) de cada fundo
 _script de amostra\
   _resumo.csv                       status, método, pendências e n para N = 1.000 de cada fundo
   <CNPJ> - <nome>\README.md         regra, trecho do regulamento e script da amostra
@@ -64,6 +66,14 @@ _script de amostra\
 Para registrar uma regra revisada à mão, edite o `regra.json` do fundo e marque `"revisado_manualmente": true`.
 O `ler` passa a usar essa regra (e não a sobrescreve) enquanto o regulamento for o mesmo documento. Se o fundo
 publicar um regulamento novo, a leitura automática volta a valer e o status mostra a mudança.
+
+#### Pasta `_revisar`
+
+A cada `ler`, o regulamento de cada fundo em `REVISÃO HUMANA` é movido para `_regulamento\_revisar\`, para quem for
+revisar achar todos num lugar só. Quando o fundo sai da revisão, o regulamento volta para a raiz de `_regulamento`.
+Isso acontece quando o `regra.json` é marcado como revisado ou quando um regulamento novo passa a ser lido
+automaticamente. O `_indice.csv` guarda o caminho com a subpasta, e o `buscar` não baixa de novo um regulamento só
+porque ele está em `_revisar`. O nome da subpasta fica em `subpastas.revisar` no `config.json`.
 
 ## O que a leitura reconhece
 
