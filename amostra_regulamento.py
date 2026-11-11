@@ -61,12 +61,32 @@ def nome_pasta(texto: str, limite: int = 70) -> str:
     return texto[:limite].strip()
 
 
+def ler_lista(caminho: Path) -> tuple[list[str], list[dict]]:
+    """Cabeçalho e linhas da lista de fundos. O cabeçalho é a primeira linha (entre as 20 primeiras) com uma coluna
+    de CNPJ: exportações do monday trazem antes o título do quadro e o nome do grupo ("3° TRIMESTRE 2026")."""
+    if caminho.suffix.lower() not in (".xlsx", ".xlsm"):
+        return motor_amostra.ler_base(caminho)
+    import openpyxl
+    wb = openpyxl.load_workbook(caminho, read_only=True, data_only=True)
+    try:
+        linhas = [l for l in wb.active.iter_rows(values_only=True)]
+    finally:
+        wb.close()
+    for i, l in enumerate(linhas[:20]):
+        if any("cnpj" in motor_amostra._chave(v) for v in l if v is not None):
+            cab = [str(v or "").strip() for v in l]
+            dados = [dict(zip(cab, x)) for x in linhas[i + 1:] if any(v not in (None, "") for v in x)]
+            return cab, dados
+    cab = [str(v or "").strip() for v in (linhas[0] if linhas else ())]
+    return cab, []
+
+
 def ler_fundos(caminho: Path) -> list[tuple[str, str]]:
     """[(cnpj só dígitos, nome)] da lista de fundos (.xlsx ou .csv com colunas de CNPJ e nome)."""
     if not caminho.exists():
         raise SystemExit(f"Lista de fundos não encontrada: {caminho}. Ajuste pastas.fundos no config.json.")
-    cab, linhas = motor_amostra.ler_base(caminho)
-    chaves = {motor_amostra._chave(c): c for c in cab}
+    cab, linhas = ler_lista(caminho)
+    chaves = {motor_amostra._chave(c): c for c in cab if c}
     col_cnpj = next((chaves[k] for k in chaves if "cnpj" in k), None)
     col_nome = next((chaves[k] for k in chaves
                      if k in ("nome fundo", "nome do fundo", "fundo", "nome", "nome_fundo", "name", "fund name")), None)
@@ -78,8 +98,11 @@ def ler_fundos(caminho: Path) -> list[tuple[str, str]]:
     for l in linhas:
         if col_gerar and not str(l.get(col_gerar) or "").strip():
             continue
-        c = so_digitos(l.get(col_cnpj))
-        if c == "0" * 14 or c in vistos:
+        digitos = re.sub(r"\D", "", str(l.get(col_cnpj) or ""))
+        if not 12 <= len(digitos) <= 14:  # linha de grupo, subitem ou CNPJ vazio (12-13: zeros à esquerda perdidos)
+            continue
+        c = so_digitos(digitos)
+        if c in vistos:
             continue
         vistos.add(c)
         out.append((c, str(l.get(col_nome) or "").strip() if col_nome else ""))

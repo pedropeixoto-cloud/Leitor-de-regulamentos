@@ -177,6 +177,18 @@ def localizar_secao(texto_norm: str) -> Secao:
     if m:
         avisos.append(f"o regulamento define “{m.group(1)}”, mas o anexo correspondente não foi encontrado no documento")
     if not notas:
+        # última tentativa: cláusulas curtas, com o título grudado no texto ("SEÇÃO II VERIFICAÇÃO DE LASTRO Artigo
+        # 66º ... será efetuada a verificação do lastro ... por amostragem"), que pontuam pouco sozinhas
+        for i, p in enumerate(paragrafos):
+            pl = sem_acento(p.lower())
+            if _RE_SUMARIO.search(p) and len(p) < 200:
+                continue
+            if _RE_NAO_REGRA.search(p.strip()[:250]) or _RE_GENERICA.search(p):
+                continue
+            if re.search(r"verific\w*[^.]{0,80}lastro|lastro[^.]{0,80}verific", pl) and re.search(
+                    r"por amostragem|amostra|individualizad|integral|substitui|inadimpl|vencidos", pl):
+                notas.append((3, i))
+    if not notas:
         return Secao(texto="", origem="nenhuma", avisos=avisos)
     notas.sort(key=lambda x: (-x[0], x[1]))
     escolhidos = sorted({i for _, i in notas[:6]})

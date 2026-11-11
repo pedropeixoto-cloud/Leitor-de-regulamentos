@@ -32,7 +32,10 @@ pip install -r requirements.txt
    - `tudo`: os dois.
    - `--cnpj 48.169.685/0001-20 ...` limita a alguns fundos. `--forcar` baixa de novo mesmo sem mudança.
    - `--fundos <arquivo.xlsx>` usa outra lista de fundos. A lista precisa de uma coluna de CNPJ e aceita `Nome Fundo`,
-     `Nome` ou `Name` como nome. Se tiver uma coluna `Gerar`, só entram as linhas marcadas.
+     `Nome` ou `Name` como nome. Se tiver uma coluna `Gerar`, só entram as linhas marcadas. O cabeçalho é a primeira
+     linha com uma coluna de CNPJ, então a exportação do monday (título do quadro e nome do grupo antes do cabeçalho)
+     é lida como vem. Linhas sem CNPJ válido (grupos, subitens) são puladas, e um CNPJ que perdeu o zero à esquerda é
+     completado.
 3. Abra `_script de amostra\_resumo.csv` e trate os fundos por status (abaixo).
 4. Na hora da auditoria, gere a amostra com a base analítica do fundo (uma linha por recebível):
    ```bash

@@ -286,6 +286,26 @@ class TestCapitulo(unittest.TestCase):
         self.assertNotIn("recomprados", r.integral_categorias)
 
 
+class TestListaDeFundos(unittest.TestCase):
+    def test_exportacao_do_monday(self):
+        """Título do quadro e nome do grupo antes do cabeçalho; linhas sem CNPJ no meio."""
+        import openpyxl
+        import amostra_regulamento as app
+        with tempfile.TemporaryDirectory() as tmp:
+            caminho = Path(tmp) / "lastro.xlsx"
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.append(["Lastro 2026"])
+            ws.append(["2° TRIMESTRE 2026-Antigo(Planner)"])
+            ws.append(["Name", "Subitems", "CNPJ", "CNPJ sem pontuação", "Cliente", "Status do Fundo"])
+            ws.append(["FIDC ALFA", None, "11.111.111/0001-11", "11111111000111", "PLANNER", None])
+            ws.append(["Subitem qualquer", None, None, None, None, None])
+            ws.append(["FIDC BETA", None, "2222222000122", None, "PLANNER", "Em Func. Normal"])  # zero à esquerda perdido
+            ws.append(["FIDC ALFA (repetido)", None, "11.111.111/0001-11", None, "PLANNER", None])
+            wb.save(caminho)
+            self.assertEqual(app.ler_fundos(caminho), [("11111111000111", "FIDC ALFA"), ("02222222000122", "FIDC BETA")])
+
+
 class TestFic(unittest.TestCase):
     def test_titulo_fic(self):
         for titulo in ("REGULAMENTO DO SIG VI FUNDO DE INVESTIMENTO EM COTAS DE FUNDOS DE INVESTIMENTO EM DIREITOS CREDITÓRIOS CNPJ nº 1",
